@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="format-detection" content="telephone=no">
+<meta name="theme-color" content="#0c0e13">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Тотка">
+<title>Тотка — 2FA коди</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-180.png">
+<style>
+:root{
+  --bg:#0c0e13; --card:#151823; --card2:#1b2030; --border:#242a3b;
+  --ink:#f2f4f8; --muted:#97a1b6; --accent:#34d9b8; --danger:#ff6b6b;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,"Cascadia Mono",Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{height:100%}
+body{
+  min-height:100dvh;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  padding:calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 24px);
+}
+.wrap{max-width:560px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;padding:4px 2px 14px}
+h1{font-size:26px;font-weight:700;letter-spacing:-.02em}
+.add-btn{width:44px;height:44px;border-radius:14px;border:1px solid var(--border);
+  background:var(--card2);color:var(--accent);font-size:26px;line-height:1;cursor:pointer;flex:none}
+.add-btn:active{transform:scale(.94)}
+.search{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--border);
+  background:var(--card);color:var(--ink);font-size:16px;-webkit-appearance:none;appearance:none;outline:none}
+.search:focus{border-color:var(--accent)}
+.banner{margin-top:12px;margin-bottom:12px;padding:12px 14px;border-radius:12px;border:1px solid var(--border);
+  background:var(--card);font-size:13.5px;line-height:1.5;color:var(--muted)}
+.banner b{color:var(--ink);font-weight:600}
+.banner .x{float:right;background:none;border:0;color:var(--muted);font-size:16px;padding:0 2px 0 10px;cursor:pointer}
+#list{margin-top:14px;display:flex;flex-direction:column;gap:10px}
+.card{position:relative;border:1px solid var(--border);background:var(--card);border-radius:16px;padding:14px 14px 12px}
+.row1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding-right:36px}
+.issuer{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.issuer:empty{display:none}
+.label{font-size:14.5px;margin-top:1px;word-break:break-all}
+.edit-btn{position:absolute;top:8px;right:6px;width:40px;height:40px;border:0;background:transparent;
+  color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:10px}
+.edit-btn:active{color:var(--ink)}
+.code-btn{display:flex;align-items:baseline;gap:10px;width:100%;background:none;border:0;cursor:pointer;
+  margin-top:6px;padding:2px 0;text-align:left;color:inherit}
+.code{font-family:var(--mono);font-size:32px;font-weight:600;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.t{font-size:12.5px;color:var(--muted);font-family:var(--mono)}
+.card.low .code,.card.low .t{color:var(--danger)}
+.track{height:3px;background:var(--border);border-radius:2px;margin-top:10px;overflow:hidden}
+.fill{height:100%;background:var(--accent);width:100%;transition:width .25s linear}
+.card.low .fill{background:var(--danger)}
+.empty{margin-top:64px;text-align:center;color:var(--muted)}
+.empty svg{opacity:.45;margin-bottom:14px}
+.empty p{font-size:14.5px;line-height:1.55;max-width:300px;margin:0 auto}
+.sheet-back{position:fixed;inset:0;background:rgba(5,7,10,.55);opacity:0;pointer-events:none;transition:opacity .2s;z-index:40}
+.sheet-back.show{opacity:1;pointer-events:auto}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--card);
+  border-radius:20px 20px 0 0;padding:14px 16px calc(env(safe-area-inset-bottom) + 18px);
+  transform:translateY(105%);transition:transform .28s cubic-bezier(.2,.8,.2,1);
+  max-width:560px;margin:0 auto;max-height:88dvh;overflow:auto}
+.sheet.show{transform:translateY(0)}
+.grab{width:36px;height:4px;border-radius:2px;background:var(--border);margin:0 auto 14px}
+.sheet h2{font-size:18px;margin-bottom:14px}
+.f{margin-bottom:12px}
+.f label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:6px}
+.f input,.f select{width:100%;padding:12px;border-radius:12px;border:1px solid var(--border);
+  background:var(--bg);color:var(--ink);font-size:16px;outline:none;-webkit-appearance:none;appearance:none}
+.f input:focus,.f select:focus{border-color:var(--accent)}
+.f input.mono{font-family:var(--mono);letter-spacing:.03em}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.btn{padding:13px;border-radius:12px;border:1px solid var(--border);background:var(--card2);
+  color:var(--ink);font-size:15.5px;font-weight:600;cursor:pointer;width:100%}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:var(--accent);color:#08221c;border-color:var(--accent)}
+.btn.danger{color:var(--danger);border-color:rgba(255,107,107,.35)}
+.btn.mini{width:auto;padding:10px 14px;font-size:14px;font-weight:500}
+.btn-row{display:flex;gap:8px;margin-top:14px}
+.btn-row .btn{flex:1}
+textarea{width:100%;min-height:140px;padding:12px;border-radius:12px;border:1px solid var(--border);
+  background:var(--bg);color:var(--ink);font-family:var(--mono);font-size:13px;outline:none;resize:vertical}
+.toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 24px);
+  transform:translate(-50%,20px);background:#e8ecf3;color:#0c0e13;padding:10px 18px;
+  border-radius:999px;font-size:14px;font-weight:600;opacity:0;transition:.25s;z-index:60;
+  pointer-events:none;max-width:90%;text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+footer{margin-top:26px;text-align:center}
+footer .links{display:inline-flex;gap:10px;align-items:center}
+footer button{background:none;border:0;color:var(--accent);font-size:13.5px;cursor:pointer;padding:8px 4px}
+footer .note{color:var(--muted);font-size:12px;margin-top:8px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Тотка</h1>
+    <button class="add-btn" id="btn-add" aria-label="Додати акаунт">+</button>
+  </header>
+
+  <div id="banner" class="banner" hidden>
+    <button class="x" id="banner-x" aria-label="Закрити">✕</button>
+    <b>Порада.</b> Спершу додайте сторінку на головний екран («Поділитися» → «На екран „Домів“»)
+    і користуйтеся встановленою іконкою — вона має власне сховище, окреме від Safari,
+    тож секрети не загубляться.
+  </div>
+
+  <input id="search" class="search" type="search" placeholder="Пошук акаунтів…" autocomplete="off">
+
+  <main id="list"></main>
+
+  <div id="empty" class="empty" hidden>
+    <svg width="56" height="56" viewBox="0 0 56 56" fill="none" stroke="currentColor" stroke-width="2.5">
+      <circle cx="28" cy="28" r="22" opacity=".5"/>
+      <path d="M28 16v12l8 6" stroke-linecap="round"/>
+    </svg>
+    <p>Ще немає жодного коду. Натисніть «+», щоб додати акаунт — вставте otpauth:// посилання
+    або введіть secret вручну.</p>
+  </div>
+
+  <footer>
+    <div class="links">
+      <button id="btn-export">Експорт</button>
+      <span style="color:var(--border)">·</span>
+      <button id="btn-import">Імпорт</button>
+    </div>
+    <div class="note">Дані зберігаються лише на цьому пристрої</div>
+  </footer>
+</div>
+
+<div class="sheet-back" id="backdrop"></div>
+
+<!-- Додавання / редагування -->
+<div class="sheet" id="sheet-edit" role="dialog" aria-modal="true">
+  <div class="grab"></div>
+  <h2 id="m-title">Новий акаунт</h2>
+  <div class="f">
+    <label for="m-otp">Посилання otpauth:// (необов'язково)</label>
+    <div class="grid2" style="margin-bottom:8px">
+      <input id="m-otp" class="mono" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="otpauth://totp/…" style="grid-column:1/3">
+    </div>
+    <button class="btn mini" id="m-parse" type="button">Розпізнати посилання</button>
+  </div>
+  <div class="grid2">
+    <div class="f"><label for="m-label">Назва (акаунт)</label><input id="m-label" type="text" autocomplete="off"></div>
+    <div class="f"><label for="m-issuer">Сервіс (issuer)</label><input id="m-issuer" type="text" autocomplete="off"></div>
+  </div>
+  <div class="f"><label for="m-secret">Secret (base32)</label>
+    <input id="m-secret" class="mono" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off" placeholder="JBSW Y3DP EHPK 3PXP"></div>
+  <div class="grid3">
+    <div class="f"><label for="m-digits">Цифр</label>
+      <select id="m-digits"><option value="6">6</option><option value="8">8</option></select></div>
+    <div class="f"><label for="m-period">Період, с</label>
+      <select id="m-period"><option value="30">30</option><option value="60">60</option></select></div>
+    <div class="f"><label for="m-algo">Алгоритм</label>
+      <select id="m-algo"><option>SHA1</option><option>SHA256</option><option>SHA512</option></select></div>
+  </div>
+  <div class="btn-row edit-only" id="edit-only" style="display:none">
+    <button class="btn" id="m-up" type="button">Вгору</button>
+    <button class="btn" id="m-down" type="button">Вниз</button>
+  </div>
+  <div class="btn-row">
+    <button class="btn danger edit-only" id="m-del" type="button" style="display:none">Видалити</button>
+    <button class="btn" id="m-cancel" type="button">Скасувати</button>
+    <button class="btn primary" id="m-save" type="button">Зберегти</button>
+  </div>
+</div>
+
+<!-- Експорт -->
+<div class="sheet" id="sheet-export" role="dialog" aria-modal="true">
+  <div class="grab"></div>
+  <h2>Експорт — резервна копія</h2>
+  <div class="f"><label for="x-pass">Пароль (необов'язково — зашифрує копію)</label>
+    <input id="x-pass" type="text" autocapitalize="off" autocomplete="off"></div>
+  <div class="f"><textarea id="x-out" readonly placeholder="Натисніть «Створити копію»"></textarea></div>
+  <div class="btn-row">
+    <button class="btn" id="x-make" type="button">Створити</button>
+    <button class="btn" id="x-copy" type="button">Копіювати</button>
+    <button class="btn" id="x-dl" type="button">Файл .json</button>
+  </div>
+  <div class="btn-row"><button class="btn" id="x-close" type="button">Закрити</button></div>
+</div>
+
+<!-- Імпорт -->
+<div class="sheet" id="sheet-import" role="dialog" aria-modal="true">
+  <div class="grab"></div>
+  <h2>Імпорт резервної копії</h2>
+  <div class="f"><label for="i-text">JSON резервної копії</label>
+    <textarea id="i-text" placeholder='{"v":1,"accounts":[…]}'></textarea></div>
+  <div class="f"><label for="i-pass">Пароль (якщо копія зашифрована)</label>
+    <input id="i-pass" type="text" autocapitalize="off" autocomplete="off"></div>
+  <div class="btn-row">
+    <button class="btn" id="i-close" type="button">Закрити</button>
+    <button class="btn primary" id="i-go" type="button">Імпортувати</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { base32Decode, base32Encode, hotp, totp, parseOtpauth, buildOtpauth, normalizeAlgo }
+  from "./core.js";
+
+// Доступ для тестів
+window.TotkaCore = { base32Decode, base32Encode, hotp, totp, parseOtpauth, buildOtpauth, normalizeAlgo };
+window.__errs = [];
+window.addEventListener("error", (e) => window.__errs.push(String(e.message || e)));
+
+const $ = (id) => document.getElementById(id);
+const LS_KEY = "totka:v1";
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
+  : "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10));
+
+function load() {
+  try {
+    const r = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+    return Array.isArray(r && r.accounts) ? r.accounts : [];
+  } catch { return []; }
+}
+const state = { accounts: load() };
+const bytesMap = new Map(); // id -> Uint8Array
+const refs = new Map();     // id -> DOM refs
+let editingId = null;
+
+function persist() {
+  localStorage.setItem(LS_KEY, JSON.stringify({
+    v: 1,
+    accounts: state.accounts.map(({ id, label, issuer, secret, digits, period, algo }) =>
+      ({ id, label, issuer, secret, digits, period, algo })),
+  }));
+}
+function refreshBytes(a) {
+  bytesMap.set(a.id, base32Decode(a.secret));
+}
+
+// ---------- рендер ----------
+function fmt(code) {
+  const d = code.length;
+  const mid = Math.ceil(d / 2);
+  return d % 2 === 0 ? code.slice(0, mid) + " " + code.slice(mid) : code.slice(0, mid) + " " + code.slice(mid);
+}
+
+function render() {
+  const q = $("search").value.trim().toLowerCase();
+  const list = $("list");
+  list.innerHTML = "";
+  refs.clear();
+  const vis = state.accounts.filter((a) =>
+    !q || (a.label + " " + a.issuer).toLowerCase().includes(q));
+  for (const a of vis) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.dataset.id = a.id;
+    card.innerHTML = `
+      <div class="row1">
+        <div>
+          <div class="issuer">${esc(a.issuer || "")}</div>
+          <div class="label">${esc(a.label)}</div>
+        </div>
+      </div>
+      <button class="edit-btn" aria-label="Редагувати">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+        </svg>
+      </button>
+      <button class="code-btn">
+        <span class="code">··· ···</span><span class="t"></span>
+      </button>
+      <div class="track"><div class="fill"></div></div>`;
+    card.querySelector(".code-btn").addEventListener("click", () => copyCode(a));
+    card.querySelector(".edit-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      openEdit(a.id);
+    });
+    list.appendChild(card);
+    refs.set(a.id, {
+      card,
+      code: card.querySelector(".code"),
+      t: card.querySelector(".t"),
+      fill: card.querySelector(".fill"),
+    });
+    a._c = null; // примусово перерахувати
+    ensureCode(a);
+  }
+  $("empty").hidden = state.accounts.length > 0;
+}
+
+// ---------- тікаймер ----------
+async function ensureCode(a) {
+  if (a._busy) return;
+  a._busy = true;
+  try {
+    const code = await totp(bytesMap.get(a.id), Date.now() / 1000, a);
+    a._code = code;
+    const r = refs.get(a.id);
+    if (r && r.code.textContent !== fmt(code)) r.code.textContent = fmt(code);
+  } catch {
+    const r = refs.get(a.id);
+    if (r) r.code.textContent = "—";
+  } finally {
+    a._busy = false;
+  }
+}
+
+function tick() {
+  const now = Date.now() / 1000;
+  for (const a of state.accounts) {
+    const r = refs.get(a.id);
+    if (!r) continue;
+    const c = Math.floor(now / a.period);
+    if (c !== a._c) { a._c = c; ensureCode(a); }
+    const rem = a.period - (now % a.period);
+    r.t.textContent = Math.ceil(rem) + " с";
+    r.fill.style.width = (rem / a.period) * 100 + "%";
+    r.card.classList.toggle("low", rem <= 5);
+  }
+}
+setInterval(tick, 250);
+
+// ---------- дії ----------
+async function copyCode(a) {
+  if (!a._code) await ensureCode(a);
+  if (!a._code) { toast("Код ще не готовий"); return; }
+  try {
+    await navigator.clipboard.writeText(a._code);
+    toast("Код скопійовано: " + fmt(a._code));
+  } catch {
+    toast("Не вдалося скопіювати");
+  }
+}
+
+let toastTimer;
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+// ---------- шити (модалки) ----------
+function openSheet(id) {
+  closeSheets(true);
+  $("backdrop").classList.add("show");
+  $(id).classList.add("show");
+}
+function closeSheets(keepBackdrop) {
+  for (const s of document.querySelectorAll(".sheet")) s.classList.remove("show");
+  if (!keepBackdrop) $("backdrop").classList.remove("show");
+}
+$("backdrop").addEventListener("click", () => closeSheets());
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSheets(); });
+
+function ensureOption(sel, val) {
+  val = String(val);
+  if (![...sel.options].some((o) => o.value === val)) {
+    const o = document.createElement("option");
+    o.value = val; o.textContent = val;
+    sel.appendChild(o);
+  }
+  sel.value = val;
+}
+
+function openAdd() {
+  editingId = null;
+  $("m-title").textContent = "Новий акаунт";
+  $("m-otp").value = "";
+  $("m-label").value = "";
+  $("m-issuer").value = "";
+  $("m-secret").value = "";
+  ensureOption($("m-digits"), 6);
+  ensureOption($("m-period"), 30);
+  $("m-algo").value = "SHA1";
+  for (const el of document.querySelectorAll(".edit-only")) el.style.display = "none";
+  openSheet("sheet-edit");
+  setTimeout(() => $("m-otp").focus(), 320);
+}
+
+function openEdit(id) {
+  const a = state.accounts.find((x) => x.id === id);
+  if (!a) return;
+  editingId = id;
+  $("m-title").textContent = "Редагувати";
+  $("m-otp").value = "";
+  $("m-label").value = a.label;
+  $("m-issuer").value = a.issuer || "";
+  $("m-secret").value = a.secret;
+  ensureOption($("m-digits"), a.digits);
+  ensureOption($("m-period"), a.period);
+  $("m-algo").value = normalizeAlgo(a.algo);
+  for (const el of document.querySelectorAll(".edit-only")) el.style.display = "";
+  openSheet("sheet-edit");
+}
+
+$("m-parse").addEventListener("click", () => {
+  try {
+    const acc = parseOtpauth($("m-otp").value);
+    $("m-label").value = acc.label;
+    $("m-issuer").value = acc.issuer || "";
+    $("m-secret").value = acc.secret;
+    ensureOption($("m-digits"), acc.digits);
+    ensureOption($("m-period"), acc.period);
+    $("m-algo").value = acc.algo;
+    toast("Розпізнано: " + acc.label);
+  } catch (e) {
+    toast(e.message || "Не вдалося розпізнати");
+  }
+});
+$("m-otp").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); $("m-parse").click(); }
+});
+
+$("m-save").addEventListener("click", () => {
+  const label = $("m-label").value.trim();
+  const issuer = $("m-issuer").value.trim();
+  const secret = $("m-secret").value.replace(/[\s-]/g, "");
+  try {
+    base32Decode(secret);
+  } catch (e) {
+    toast(e.message || "Некоректний secret");
+    return;
+  }
+  const digits = Number($("m-digits").value) || 6;
+  const period = Number($("m-period").value) || 30;
+  const algo = normalizeAlgo($("m-algo").value);
+  if (editingId) {
+    const a = state.accounts.find((x) => x.id === editingId);
+    Object.assign(a, { label: label || issuer || "Акаунт", issuer, secret, digits, period, algo });
+  } else {
+    state.accounts.push({
+      id: uuid(), label: label || issuer || "Акаунт",
+      issuer, secret, digits, period, algo,
+    });
+  }
+  persist();
+  state.accounts.forEach(refreshBytes);
+  render();
+  closeSheets();
+  toast("Збережено");
+});
+
+$("m-cancel").addEventListener("click", () => closeSheets());
+$("btn-add").addEventListener("click", openAdd);
+
+$("m-del").addEventListener("click", () => {
+  const i = state.accounts.findIndex((x) => x.id === editingId);
+  if (i < 0) return;
+  const a = state.accounts[i];
+  if (!confirm(`Видалити «${a.label}»?`)) return;
+  state.accounts.splice(i, 1);
+  bytesMap.delete(a.id);
+  persist();
+  render();
+  closeSheets();
+  toast("Видалено");
+});
+
+function move(dir) {
+  const i = state.accounts.findIndex((x) => x.id === editingId);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= state.accounts.length) return;
+  [state.accounts[i], state.accounts[j]] = [state.accounts[j], state.accounts[i]];
+  persist();
+  render();
+}
+$("m-up").addEventListener("click", () => move(-1));
+$("m-down").addEventListener("click", () => move(1));
+
+$("search").addEventListener("input", render);
+
+// ---------- банер-підказка ----------
+if (!localStorage.getItem("totka:hint")) $("banner").hidden = false;
+$("banner-x").addEventListener("click", () => {
+  $("banner").hidden = true;
+  localStorage.setItem("totka:hint", "1");
+});
+
+// ---------- шифрування експорту ----------
+const b64 = (u8) => {
+  let s = "";
+  for (let i = 0; i < u8.length; i += 0x8000)
+    s += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+  return btoa(s);
+};
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+const te = new TextEncoder();
+const td = new TextDecoder();
+
+async function deriveKey(pass, salt, usages) {
+  const km = await crypto.subtle.importKey("raw", te.encode(pass), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: 150000, hash: "SHA-256" },
+    km, { name: "AES-GCM", length: 256 }, false, usages);
+}
+async function encryptJson(obj, pass) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(pass, salt, ["encrypt"]);
+  const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, te.encode(JSON.stringify(obj)));
+  return { v: 1, enc: true, kdf: "PBKDF2-SHA256-150000", salt: b64(salt), iv: b64(iv), data: b64(new Uint8Array(data)) };
+}
+async function decryptJson(payload, pass) {
+  if (!payload || payload.enc !== true) throw new Error("Це не зашифрований експорт");
+  const key = await deriveKey(pass, unb64(payload.salt), ["decrypt"]);
+  const pt = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: unb64(payload.iv) }, key, unb64(payload.data));
+  return JSON.parse(td.decode(pt));
+}
+
+// ---------- експорт / імпорт ----------
+function exportData() {
+  return {
+    v: 1,
+    app: "totka",
+    exported: new Date().toISOString(),
+    accounts: state.accounts.map(({ id, label, issuer, secret, digits, period, algo }) =>
+      ({ id, label, issuer, secret, digits, period, algo })),
+  };
+}
+$("btn-export").addEventListener("click", () => { $("x-out").value = ""; openSheet("sheet-export"); });
+$("x-make").addEventListener("click", async () => {
+  const pass = $("x-pass").value;
+  try {
+    const out = pass ? await encryptJson(exportData(), pass) : exportData();
+    $("x-out").value = JSON.stringify(out, null, pass ? 0 : 2);
+  } catch (e) { toast("Помилка: " + e.message); }
+});
+$("x-copy").addEventListener("click", async () => {
+  if (!$("x-out").value) { toast("Спершу натисніть «Створити»"); return; }
+  try { await navigator.clipboard.writeText($("x-out").value); toast("Скопійовано"); }
+  catch { toast("Не вдалося скопіювати"); }
+});
+$("x-dl").addEventListener("click", () => {
+  if (!$("x-out").value) { toast("Спершу натисніть «Створити»"); return; }
+  const blob = new Blob([$("x-out").value], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const d = new Date();
+  a.download = `totka-backup-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+$("x-close").addEventListener("click", () => closeSheets());
+
+$("btn-import").addEventListener("click", () => { $("i-text").value = ""; $("i-pass").value = ""; openSheet("sheet-import"); });
+$("i-go").addEventListener("click", async () => {
+  let payload;
+  try { payload = JSON.parse($("i-text").value); }
+  catch { toast("Некоректний JSON"); return; }
+  try {
+    if (payload && payload.enc === true) {
+      payload = await decryptJson(payload, $("i-pass").value);
+      if (!payload || !Array.isArray(payload.accounts)) throw new Error("Після розшифрування немає accounts");
+    }
+  } catch (e) { toast("Не розшифровано: " + (e.message || "пароль?")); return; }
+  const arr = Array.isArray(payload && payload.accounts) ? payload.accounts : [];
+  if (!arr.length) { toast("У копії немає акаунтів"); return; }
+  const seen = new Set(state.accounts.map((a) =>
+    (a.issuer + "|" + a.label + "|" + a.secret).toLowerCase()));
+  let added = 0, skipped = 0;
+  for (const raw of arr) {
+    if (!raw || !raw.secret) { skipped++; continue; }
+    const key = ((raw.issuer || "") + "|" + (raw.label || "") + "|" + raw.secret).toLowerCase();
+    try { base32Decode(raw.secret); } catch { skipped++; continue; }
+    if (seen.has(key)) { skipped++; continue; }
+    seen.add(key);
+    state.accounts.push({
+      id: uuid(),
+      label: String(raw.label || "Акаунт"),
+      issuer: String(raw.issuer || ""),
+      secret: String(raw.secret).replace(/[\s-]/g, ""),
+      digits: Number(raw.digits) || 6,
+      period: Number(raw.period) || 30,
+      algo: normalizeAlgo(raw.algo),
+    });
+    added++;
+  }
+  persist();
+  state.accounts.forEach(refreshBytes);
+  render();
+  closeSheets();
+  toast(`Імпортовано: +${added}${skipped ? ` (пропущено ${skipped})` : ""}`);
+});
+$("i-close").addEventListener("click", () => closeSheets());
+
+// ---------- старт ----------
+state.accounts.forEach(refreshBytes);
+render();
+tick();
+if (location.protocol === "http:" || location.protocol === "https:") {
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
+}
+</script>
+</body>
+</html>
