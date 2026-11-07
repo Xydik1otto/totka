@@ -146,7 +146,7 @@ footer .note{color:var(--muted);font-size:12px;margin-top:8px}
       <span style="color:var(--border)">·</span>
       <button id="btn-selftest">Самотест</button>
     </div>
-    <div class="note">Дані зберігаються лише на цьому пристрої</div>
+    <div class="note">Дані зберігаються лише на цьому пристрої · <span id="appver"></span></div>
   </footer>
 </div>
 
@@ -249,6 +249,7 @@ window.addEventListener("error", (e) => window.__errs.push(String(e.message || e
 
 const $ = (id) => document.getElementById(id);
 const LS_KEY = "totka:v1";
+const APP_VER = "v1.2";
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID()
@@ -749,11 +750,24 @@ $("btn-selftest").addEventListener("click", async () => {
 });
 
 // ---------- старт ----------
+$("appver").textContent = APP_VER;
 state.accounts.forEach(refreshBytes);
 render();
 tick();
+// ---------- SW: реєстрація + авто-перезавантаження при оновленні ----------
+const hadController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
 if (location.protocol === "http:" || location.protocol === "https:") {
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      // новий SW перехопив керування після того, як сторінку обслуговував
+      // старий — значить, в кеші вже свіжі файли: перезавантажуємось один раз
+      if (hadController && !window.__reloaded) {
+        window.__reloaded = true;
+        location.reload();
+      }
+    });
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  }
 }
 </script>
 </body>
