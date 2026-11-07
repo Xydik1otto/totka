@@ -131,6 +131,8 @@ footer .note{color:var(--muted);font-size:12px;margin-top:8px}
       <button id="btn-export">Експорт</button>
       <span style="color:var(--border)">·</span>
       <button id="btn-import">Імпорт</button>
+      <span style="color:var(--border)">·</span>
+      <button id="btn-selftest">Самотест</button>
     </div>
     <div class="note">Дані зберігаються лише на цьому пристрої</div>
   </footer>
@@ -497,10 +499,11 @@ const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 const te = new TextEncoder();
 const td = new TextDecoder();
 
-async function deriveKey(pass, salt, usages) {
+const PBKDF2_IT = 600000; // OWASP: PBKDF2-SHA256 ≥600k ітерацій
+async function deriveKey(pass, salt, usages, it = PBKDF2_IT) {
   const km = await crypto.subtle.importKey("raw", te.encode(pass), "PBKDF2", false, ["deriveKey"]);
   return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: 150000, hash: "SHA-256" },
+    { name: "PBKDF2", salt, iterations: it, hash: "SHA-256" },
     km, { name: "AES-GCM", length: 256 }, false, usages);
 }
 async function encryptJson(obj, pass) {
@@ -508,11 +511,13 @@ async function encryptJson(obj, pass) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(pass, salt, ["encrypt"]);
   const data = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, te.encode(JSON.stringify(obj)));
-  return { v: 1, enc: true, kdf: "PBKDF2-SHA256-150000", salt: b64(salt), iv: b64(iv), data: b64(new Uint8Array(data)) };
+  return { v: 1, enc: true, kdf: `PBKDF2-SHA256-${PBKDF2_IT}`, it: PBKDF2_IT, salt: b64(salt), iv: b64(iv), data: b64(new Uint8Array(data)) };
 }
 async function decryptJson(payload, pass) {
   if (!payload || payload.enc !== true) throw new Error("Це не зашифрований експорт");
-  const key = await deriveKey(pass, unb64(payload.salt), ["decrypt"]);
+  const m = /(\d+)\s*$/.exec(String(payload.kdf || ""));
+  const it = Number(payload.it) || (m ? Number(m[1]) : PBKDF2_IT);
+  const key = await deriveKey(pass, unb64(payload.salt), ["decrypt"], it);
   const pt = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: unb64(payload.iv) }, key, unb64(payload.data));
   return JSON.parse(td.decode(pt));
@@ -593,6 +598,40 @@ $("i-go").addEventListener("click", async () => {
   toast(`Імпортовано: +${added}${skipped ? ` (пропущено ${skipped})` : ""}`);
 });
 $("i-close").addEventListener("click", () => closeSheets());
+
+// ---------- самотест на пристрої (RFC 6238) ----------
+$("btn-selftest").addEventListener("click", async () => {
+  const C = window.TotkaCore;
+  const enc8 = new TextEncoder();
+  const seeds = [
+    ["SHA1", C.base32Decode("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ")],
+    ["SHA256", enc8.encode("12345678901234567890123456789012")],
+    ["SHA512", enc8.encode("1234567890123456789012345678901234567890123456789012345678901234")],
+  ];
+  const T = [59, 1111111109, 1111111111, 1234567890, 2000000000, 20000000000];
+  const V = {
+    SHA1: ["94287082", "07081804", "14050471", "89005924", "69279037", "65353130"],
+    SHA256: ["46119246", "68084774", "67062674", "91819424", "90698825", "77737706"],
+    SHA512: ["90693936", "25091201", "99943326", "93441116", "38618901", "47863826"],
+  };
+  let ok = 0, total = 0;
+  try {
+    for (const [algo, seed] of seeds) {
+      for (let i = 0; i < T.length; i++) {
+        total++;
+        if ((await C.hotp(seed, Math.floor(T[i] / 30), 8, algo)) === V[algo][i]) ok++;
+      }
+    }
+    total++;
+    if ((await C.totp(seeds[0][1], 59, { digits: 6 })) === "287082") ok++;
+  } catch (err) {
+    toast("Самотест впав: " + (err.message || err));
+    return;
+  }
+  toast(ok === total
+    ? `Самотест: ${ok}/${total} OK — коди на цьому пристрої коректні`
+    : `Самотест: лише ${ok}/${total} — напиши мені, розберемось`);
+});
 
 // ---------- старт ----------
 state.accounts.forEach(refreshBytes);

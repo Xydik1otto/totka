@@ -1,5 +1,5 @@
 // Service Worker Тотки: cache-first, повний офлайн після першого відкриття
-const V = "totka-v1";
+const V = "totka-v2";
 const ASSETS = [
   "./",
   "./index.html",
