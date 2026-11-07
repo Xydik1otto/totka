@@ -1,4 +1,5 @@
 {
+  "id": "totka",
   "name": "Тотка — 2FA коди",
   "short_name": "Тотка",
   "description": "Власний TOTP-аутентифікатор. Коди живуть лише на вашому пристрої.",
@@ -6,10 +7,13 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
+  "lang": "uk",
+  "prefer_related_applications": false,
   "background_color": "#0c0e13",
   "theme_color": "#0c0e13",
   "icons": [
-    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png" },
-    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
