@@ -96,6 +96,18 @@ footer{margin-top:26px;text-align:center}
 footer .links{display:inline-flex;gap:10px;align-items:center}
 footer button{background:none;border:0;color:var(--accent);font-size:13.5px;cursor:pointer;padding:8px 4px}
 footer .note{color:var(--muted);font-size:12px;margin-top:8px}
+.scan{position:fixed;inset:0;z-index:70;background:var(--bg);display:none}
+.scan.show{display:block}
+.scan video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.scan .frame{position:absolute;inset:0;margin:auto;width:min(80vw,330px);height:min(80vw,330px);
+  border-radius:22px;border:1.5px solid rgba(255,255,255,.35);
+  box-shadow:0 0 0 200vmax rgba(5,7,10,.6);pointer-events:none}
+.scan .top{position:absolute;top:calc(env(safe-area-inset-top) + 12px);left:16px;right:16px;
+  display:flex;justify-content:space-between;align-items:center;z-index:2}
+.scan .hint{color:#fff;font-size:14px;font-weight:600;text-shadow:0 1px 6px rgba(0,0,0,.8)}
+.scan .actions{position:absolute;bottom:calc(env(safe-area-inset-bottom) + 20px);left:0;right:0;
+  display:flex;justify-content:center;padding:0 16px;z-index:2}
+.scan canvas{display:none}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
@@ -149,7 +161,10 @@ footer .note{color:var(--muted);font-size:12px;margin-top:8px}
     <div class="grid2" style="margin-bottom:8px">
       <input id="m-otp" class="mono" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="otpauth://totp/…" style="grid-column:1/3">
     </div>
-    <button class="btn mini" id="m-parse" type="button">Розпізнати посилання</button>
+    <div class="btn-row" style="margin-top:0">
+      <button class="btn mini" id="m-parse" type="button">Розпізнати посилання</button>
+      <button class="btn mini" id="m-scan" type="button">Сканувати QR</button>
+    </div>
   </div>
   <div class="grid2">
     <div class="f"><label for="m-label">Назва (акаунт)</label><input id="m-label" type="text" autocomplete="off"></div>
@@ -205,8 +220,24 @@ footer .note{color:var(--muted);font-size:12px;margin-top:8px}
   </div>
 </div>
 
+<!-- Сканер QR -->
+<div class="scan" id="scan">
+  <video id="scan-video" playsinline muted autoplay></video>
+  <div class="frame"></div>
+  <div class="top">
+    <span class="hint">Наведіть камеру на QR-код</span>
+    <button class="btn mini" id="scan-close" type="button">Готово</button>
+  </div>
+  <div class="actions">
+    <button class="btn mini" id="scan-photo" type="button">Знайти QR на фото</button>
+  </div>
+  <canvas id="scan-canvas"></canvas>
+  <input id="scan-file" type="file" accept="image/*" hidden>
+</div>
+
 <div class="toast" id="toast"></div>
 
+<script src="./jsQR.min.js"></script>
 <script type="module">
 import { base32Decode, base32Encode, hotp, totp, parseOtpauth, buildOtpauth, normalizeAlgo }
   from "./core.js";
@@ -598,6 +629,90 @@ $("i-go").addEventListener("click", async () => {
   toast(`Імпортовано: +${added}${skipped ? ` (пропущено ${skipped})` : ""}`);
 });
 $("i-close").addEventListener("click", () => closeSheets());
+
+// ---------- сканер QR ----------
+let scanStream = null, scanRAF = 0, lastQrAt = 0;
+const scanEl = $("scan"), scanV = $("scan-video"), scanC = $("scan-canvas");
+const scanX = scanC.getContext("2d", { willReadFrequently: true });
+
+function stopScan() {
+  if (scanRAF) { cancelAnimationFrame(scanRAF); scanRAF = 0; }
+  if (scanStream) { scanStream.getTracks().forEach((t) => t.stop()); scanStream = null; }
+  scanV.srcObject = null;
+  scanEl.classList.remove("show");
+  document.removeEventListener("visibilitychange", onScanHidden);
+}
+function onScanHidden() { if (document.hidden) stopScan(); }
+
+async function startScan() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    toast("Камера недоступна в цьому браузері");
+    return;
+  }
+  scanEl.classList.add("show");
+  document.addEventListener("visibilitychange", onScanHidden);
+  try {
+    scanStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 } },
+      audio: false,
+    });
+    scanV.srcObject = scanStream;
+    await scanV.play();
+    scanLoop();
+  } catch (e) {
+    stopScan();
+    toast(e && e.name === "NotAllowedError"
+      ? "Немає дозволу на камеру — дозвольте доступ і спробуйте ще"
+      : "Камера недоступна: " + ((e && (e.message || e.name)) || e));
+  }
+}
+
+function scanLoop() {
+  scanRAF = requestAnimationFrame(scanLoop);
+  const now = performance.now();
+  if (now - lastQrAt < 120 || scanV.readyState < 2 || !scanV.videoWidth) return;
+  lastQrAt = now;
+  const k = Math.min(1, 640 / scanV.videoWidth);
+  const w = Math.round(scanV.videoWidth * k), h = Math.round(scanV.videoHeight * k);
+  scanC.width = w; scanC.height = h;
+  scanX.drawImage(scanV, 0, 0, w, h);
+  let res = null;
+  try {
+    res = window.jsQR && window.jsQR(scanX.getImageData(0, 0, w, h).data, w, h,
+      { inversionAttempts: "dontInvert" });
+  } catch { return; }
+  if (res && res.data) { stopScan(); handleScanned(res.data); }
+}
+
+function handleScanned(text) {
+  const s = String(text).trim();
+  if (!/^otpauth:\/\//i.test(s)) { toast("У QR немає otpauth:// посилання"); return; }
+  $("m-otp").value = s;
+  $("m-parse").click();
+}
+
+$("m-scan").addEventListener("click", startScan);
+$("scan-close").addEventListener("click", stopScan);
+$("scan-photo").addEventListener("click", () => $("scan-file").click());
+$("scan-file").addEventListener("change", async (e) => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!f || !window.jsQR) return;
+  stopScan();
+  try {
+    const url = URL.createObjectURL(f);
+    const im = new Image();
+    await new Promise((ok, bad) => { im.onload = ok; im.onerror = bad; im.src = url; });
+    const k = Math.min(1, 1400 / Math.max(im.width, im.height));
+    const w = Math.round(im.width * k), h = Math.round(im.height * k);
+    scanC.width = w; scanC.height = h;
+    scanX.drawImage(im, 0, 0, w, h);
+    const res = window.jsQR(scanX.getImageData(0, 0, w, h).data, w, h);
+    URL.revokeObjectURL(url);
+    if (res && res.data) handleScanned(res.data);
+    else toast("QR на фото не знайдено");
+  } catch { toast("Не вдалося прочитати фото"); }
+});
 
 // ---------- самотест на пристрої (RFC 6238) ----------
 $("btn-selftest").addEventListener("click", async () => {
